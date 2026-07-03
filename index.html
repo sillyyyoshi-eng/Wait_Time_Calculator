@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wait Time Report Generator</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --ink:#1c211d;
+    --paper:#f6f5f0;
+    --panel:#ffffff;
+    --line:#dcd9cd;
+    --green:#3c5a41;
+    --green-deep:#28392c;
+    --amber:#c17f2e;
+    --amber-soft:#f2e2c8;
+    --muted:#6d7268;
+    --mono: 'IBM Plex Mono', 'SFMono-Regular', Consolas, monospace;
+    --sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  @font-face{
+    font-family:'IBM Plex Sans';
+    src:local('Segoe UI');
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:var(--sans);
+    background:var(--paper);
+    color:var(--ink);
+    background-image:
+      linear-gradient(var(--line) 1px, transparent 1px);
+    background-size: 100% 42px;
+    background-attachment:local;
+    min-height:100vh;
+  }
+  .wrap{
+    max-width:980px;
+    margin:0 auto;
+    padding:48px 28px 90px;
+  }
+  header{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-end;
+    border-bottom:3px solid var(--ink);
+    padding-bottom:18px;
+    margin-bottom:36px;
+    flex-wrap:wrap;
+    gap:12px;
+  }
+  .eyebrow{
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    color:var(--amber);
+    margin:0 0 6px;
+  }
+  h1{
+    font-size:30px;
+    line-height:1.15;
+    margin:0;
+    font-weight:700;
+    letter-spacing:-0.01em;
+  }
+  .clockface{
+    font-family:var(--mono);
+    font-size:12px;
+    color:var(--muted);
+    text-align:right;
+    line-height:1.5;
+  }
+  .clockface b{color:var(--ink);}
+
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:2px;
+    padding:28px;
+    margin-bottom:24px;
+    box-shadow:0 1px 0 rgba(0,0,0,0.02);
+  }
+  .panel h2{
+    font-size:13px;
+    text-transform:uppercase;
+    letter-spacing:.1em;
+    font-family:var(--mono);
+    color:var(--green-deep);
+    margin:0 0 4px;
+  }
+  .panel p.desc{
+    color:var(--muted);
+    font-size:14px;
+    margin:0 0 20px;
+    max-width:60ch;
+  }
+
+  #dropzone{
+    border:2px dashed #b9b3a0;
+    border-radius:2px;
+    padding:38px 20px;
+    text-align:center;
+    cursor:pointer;
+    transition:border-color .15s ease, background .15s ease;
+    background:repeating-linear-gradient(135deg, transparent, transparent 10px, rgba(60,90,65,0.025) 10px, rgba(60,90,65,0.025) 20px);
+  }
+  #dropzone:hover, #dropzone.drag{
+    border-color:var(--green);
+    background-color:rgba(60,90,65,0.05);
+  }
+  #dropzone .icon{
+    font-family:var(--mono);
+    font-size:26px;
+    color:var(--green);
+    margin-bottom:10px;
+    letter-spacing:.2em;
+  }
+  #dropzone .primary{
+    font-weight:600;
+    font-size:15px;
+    margin-bottom:4px;
+  }
+  #dropzone .secondary{
+    font-size:12.5px;
+    color:var(--muted);
+    font-family:var(--mono);
+  }
+  #fileInput{display:none;}
+
+  .filebar{
+    display:none;
+    align-items:center;
+    justify-content:space-between;
+    margin-top:16px;
+    padding:10px 14px;
+    background:var(--amber-soft);
+    border:1px solid #e0c99a;
+    border-radius:2px;
+    font-family:var(--mono);
+    font-size:12.5px;
+  }
+  .filebar.show{display:flex;}
+  .filebar .name{color:var(--green-deep);font-weight:600;}
+  .filebar button{
+    background:none;border:none;color:var(--muted);
+    text-decoration:underline;cursor:pointer;font-family:var(--mono);font-size:12px;
+  }
+
+  .status{
+    font-family:var(--mono);
+    font-size:12.5px;
+    color:var(--muted);
+    margin-top:14px;
+    min-height:16px;
+  }
+  .status.error{color:#a8402f;}
+  .status.ok{color:var(--green);}
+
+  #resultsPanel{display:none;}
+
+  .summary-row{
+    display:flex;
+    gap:28px;
+    flex-wrap:wrap;
+    margin-bottom:22px;
+    padding-bottom:18px;
+    border-bottom:1px solid var(--line);
+  }
+  .stat .num{
+    font-family:var(--mono);
+    font-size:24px;
+    font-weight:700;
+    color:var(--green-deep);
+    line-height:1;
+  }
+  .stat .lbl{
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    color:var(--muted);
+    margin-top:5px;
+  }
+
+  .table-scroll{
+    overflow-x:auto;
+    border:1px solid var(--line);
+  }
+  table.pivot{
+    border-collapse:collapse;
+    width:100%;
+    font-family:var(--mono);
+    font-size:12.5px;
+    min-width:820px;
+  }
+  table.pivot th, table.pivot td{
+    padding:9px 10px;
+    text-align:right;
+    border-bottom:1px solid var(--line);
+    border-right:1px solid var(--line);
+    white-space:nowrap;
+  }
+  table.pivot th{
+    background:var(--green-deep);
+    color:#f1efe6;
+    font-weight:600;
+    text-align:right;
+    position:sticky;
+    top:0;
+  }
+  table.pivot th:first-child, table.pivot td.rowhead{
+    text-align:left;
+    background:#eee9da;
+    color:var(--ink);
+    font-weight:700;
+    position:sticky;
+    left:0;
+  }
+  table.pivot th:first-child{background:var(--ink);color:#fff;}
+  table.pivot tr:nth-child(even) td{background:rgba(60,90,65,0.035);}
+  table.pivot tr:nth-child(even) td.rowhead{background:#e5dfcd;}
+  table.pivot td.empty{color:#c8c3b4;}
+  table.pivot td.hi{color:#a8402f;font-weight:700;}
+
+  .legend{
+    display:flex;
+    gap:18px;
+    margin-top:12px;
+    font-family:var(--mono);
+    font-size:11px;
+    color:var(--muted);
+    flex-wrap:wrap;
+  }
+  .legend span.sw{display:inline-block;width:9px;height:9px;background:#a8402f;margin-right:5px;border-radius:1px;}
+
+  .actions{
+    display:flex;
+    gap:12px;
+    margin-top:22px;
+    flex-wrap:wrap;
+  }
+  button.btn{
+    font-family:var(--mono);
+    font-size:12.5px;
+    letter-spacing:.03em;
+    padding:12px 20px;
+    border-radius:2px;
+    border:1px solid var(--ink);
+    background:var(--ink);
+    color:#fff;
+    cursor:pointer;
+    transition:transform .1s ease, background .15s ease;
+  }
+  button.btn:hover{background:var(--green-deep);}
+  button.btn:active{transform:translateY(1px);}
+  button.btn.secondary{
+    background:transparent;
+    color:var(--ink);
+    border-color:#b9b3a0;
+  }
+  button.btn.secondary:hover{border-color:var(--ink);}
+
+  footer{
+    margin-top:40px;
+    font-family:var(--mono);
+    font-size:11px;
+    color:var(--muted);
+    text-align:center;
+  }
+
+  @media (max-width:600px){
+    h1{font-size:23px;}
+    .panel{padding:20px;}
+    .clockface{text-align:left;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <p class="eyebrow">Front Desk &rarr; POS / Sanctuary Sac</p>
+      <h1>Wait Time Report Generator</h1>
+    </div>
+    <div class="clockface">
+      ID scan &rarr; name selected<br>
+      <b>avg_wait_minutes</b> by day &times; hour
+    </div>
+  </header>
+
+  <div class="panel">
+    <h2>01 &mdash; Load Source Report</h2>
+    <p class="desc">Drop in the daily export ("Customer Wait Time by Hour by Day"). It needs the columns <b>date, day_of_week, hour, hour_label, avg_wait_minutes, transaction_count</b> &mdash; same as the Treez wait time pull.</p>
+
+    <div id="dropzone">
+      <div class="icon">&#8595;</div>
+      <div class="primary">Drop the .xlsx here, or click to browse</div>
+      <div class="secondary">accepts .xlsx / .xls / .csv</div>
+    </div>
+    <input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
+
+    <div class="filebar" id="filebar">
+      <span class="name" id="filename"></span>
+      <button id="clearFile">remove</button>
+    </div>
+
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="panel" id="resultsPanel">
+    <h2>02 &mdash; Average Wait, By Day &times; Hour</h2>
+    <p class="desc">Simple mean of <b>avg_wait_minutes</b> across every date matching that weekday and hour &mdash; not weighted by transaction volume. Matches the "Average Wait" tab format.</p>
+
+    <div class="summary-row" id="summaryRow"></div>
+
+    <div class="table-scroll">
+      <table class="pivot" id="pivotTable"></table>
+    </div>
+
+    <div class="legend"><span class="sw"></span> 4.00+ min average (slow hour, worth a look)</div>
+
+    <div class="actions">
+      <button class="btn" id="downloadBtn">Download June 2026 Average Wait Time by Hour.xlsx</button>
+      <button class="btn secondary" id="downloadCsv">Download pivot as CSV</button>
+    </div>
+  </div>
+
+  <footer>built for The Sanctuary Sac &middot; runs entirely in your browser, nothing is uploaded anywhere</footer>
+</div>
+
+<script>
+const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+const HOURS = [7,8,9,10,11,12,13,14,15,16,17,18,19,20,21];
+const HOUR_LABELS = {7:'7am',8:'8am',9:'9am',10:'10am',11:'11am',12:'12pm',13:'1pm',14:'2pm',15:'3pm',16:'4pm',17:'5pm',18:'6pm',19:'7pm',20:'8pm',21:'9pm'};
+
+let rawRows = [];
+let pivot = null;
+
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const statusEl = document.getElementById('status');
+const filebar = document.getElementById('filebar');
+const filenameEl = document.getElementById('filename');
+const resultsPanel = document.getElementById('resultsPanel');
+
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropzone.classList.remove('drag');
+  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e => {
+  if (e.target.files.length) handleFile(e.target.files[0]);
+});
+document.getElementById('clearFile').addEventListener('click', () => {
+  rawRows = []; pivot = null;
+  filebar.classList.remove('show');
+  resultsPanel.style.display = 'none';
+  statusEl.textContent = '';
+  fileInput.value = '';
+});
+
+function setStatus(msg, kind){
+  statusEl.textContent = msg;
+  statusEl.className = 'status' + (kind ? ' ' + kind : '');
+}
+
+function handleFile(file){
+  filenameEl.textContent = file.name;
+  filebar.classList.add('show');
+  setStatus('Reading ' + file.name + ' ...');
+
+  const reader = new FileReader();
+  reader.onload = evt => {
+    try {
+      const data = new Uint8Array(evt.target.result);
+      const wb = XLSX.read(data, { type: 'array' });
+      const sheetName = wb.SheetNames[0];
+      const sheet = wb.Sheets[sheetName];
+      const json = XLSX.utils.sheet_to_json(sheet, { defval: null, raw: true });
+
+      const normalized = json.map(r => normalizeRow(r)).filter(r => r !== null);
+
+      if (!normalized.length) {
+        setStatus('No usable rows found. Check the file has date, day_of_week, hour, avg_wait_minutes columns.', 'error');
+        return;
+      }
+
+      rawRows = normalized;
+      pivot = buildPivot(rawRows);
+      renderResults();
+      setStatus('Loaded ' + rawRows.length + ' rows from "' + sheetName + '". Pivot built below.', 'ok');
+    } catch (err) {
+      console.error(err);
+      setStatus('Could not parse that file: ' + err.message, 'error');
+    }
+  };
+  reader.onerror = () => setStatus('Could not read the file.', 'error');
+  reader.readAsArrayBuffer(file);
+}
+
+function normalizeRow(r){
+  const keys = Object.keys(r);
+  const get = (name) => {
+    const k = keys.find(k => k.toLowerCase().trim() === name);
+    return k ? r[k] : undefined;
+  };
+
+  let day = get('day_of_week');
+  let hour = get('hour');
+  let hourLabel = get('hour_label');
+  let avgWait = get('avg_wait_minutes');
+  let count = get('transaction_count');
+  let date = get('date');
+
+  if (day == null || hour == null || avgWait == null) return null;
+
+  day = String(day).trim();
+  hour = Number(hour);
+  avgWait = Number(avgWait);
+  count = count == null ? null : Number(count);
+
+  if (!DAYS.includes(day) || Number.isNaN(hour) || Number.isNaN(avgWait)) return null;
+
+  return { date, day_of_week: day, hour, hour_label: hourLabel, avg_wait_minutes: avgWait, transaction_count: count };
+}
+
+function buildPivot(rows){
+  const groups = {};
+  rows.forEach(r => {
+    const key = r.day_of_week + '|' + r.hour;
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(r.avg_wait_minutes);
+  });
+
+  const table = {};
+  let totalCells = 0, filledCells = 0;
+  DAYS.forEach(d => {
+    table[d] = {};
+    HOURS.forEach(h => {
+      totalCells++;
+      const key = d + '|' + h;
+      if (groups[key] && groups[key].length) {
+        const vals = groups[key];
+        table[d][h] = vals.reduce((a,b) => a+b, 0) / vals.length;
+        filledCells++;
+      } else {
+        table[d][h] = null;
+      }
+    });
+  });
+
+  const totalTx = rows.reduce((a,r) => a + (r.transaction_count || 0), 0);
+  const dateSet = new Set(rows.map(r => String(r.date)));
+
+  return { table, totalCells, filledCells, totalTx, dayCount: dateSet.size };
+}
+
+function renderResults(){
+  resultsPanel.style.display = 'block';
+
+  const summaryRow = document.getElementById('summaryRow');
+  summaryRow.innerHTML = `
+    <div class="stat"><div class="num">${rawRows.length}</div><div class="lbl">source rows</div></div>
+    <div class="stat"><div class="num">${pivot.dayCount}</div><div class="lbl">unique dates</div></div>
+    <div class="stat"><div class="num">${pivot.totalTx.toLocaleString()}</div><div class="lbl">total transactions</div></div>
+    <div class="stat"><div class="num">${pivot.filledCells}/${pivot.totalCells}</div><div class="lbl">day&times;hour cells with data</div></div>
+  `;
+
+  const table = document.getElementById('pivotTable');
+  let thead = '<thead><tr><th>Day</th>';
+  HOURS.forEach(h => thead += `<th>${HOUR_LABELS[h]}</th>`);
+  thead += '</tr></thead>';
+
+  let tbody = '<tbody>';
+  DAYS.forEach(d => {
+    tbody += `<tr><td class="rowhead">${d}</td>`;
+    HOURS.forEach(h => {
+      const v = pivot.table[d][h];
+      if (v === null) {
+        tbody += '<td class="empty">&mdash;</td>';
+      } else {
+        const cls = v >= 4 ? 'hi' : '';
+        tbody += `<td class="${cls}">${v.toFixed(2)}</td>`;
+      }
+    });
+    tbody += '</tr>';
+  });
+  tbody += '</tbody>';
+
+  table.innerHTML = thead + tbody;
+}
+
+document.getElementById('downloadBtn').addEventListener('click', () => {
+  if (!pivot) return;
+
+  const wb = XLSX.utils.book_new();
+
+  const pivotAoa = [['Day', ...HOURS.map(h => HOUR_LABELS[h])]];
+  DAYS.forEach(d => {
+    const row = [d];
+    HOURS.forEach(h => {
+      const v = pivot.table[d][h];
+      row.push(v === null ? null : Number(v.toFixed(6)));
+    });
+    pivotAoa.push(row);
+  });
+  const wsPivot = XLSX.utils.aoa_to_sheet(pivotAoa);
+  wsPivot['!cols'] = [{ wch: 12 }, ...HOURS.map(() => ({ wch: 8 }))];
+  for (let c = 1; c <= HOURS.length; c++) {
+    for (let r = 1; r <= DAYS.length; r++) {
+      const addr = XLSX.utils.encode_cell({ r, c });
+      if (wsPivot[addr] && wsPivot[addr].v !== null) wsPivot[addr].z = '0.00';
+    }
+  }
+  XLSX.utils.book_append_sheet(wb, wsPivot, 'Average Wait');
+
+  const dataAoa = [['date','day_of_week','hour','hour_label','avg_wait_minutes','transaction_count']];
+  rawRows.forEach(r => {
+    dataAoa.push([r.date, r.day_of_week, r.hour, r.hour_label, r.avg_wait_minutes, r.transaction_count]);
+  });
+  const wsData = XLSX.utils.aoa_to_sheet(dataAoa);
+  wsData['!cols'] = [{ wch: 10 }, { wch: 12 }, { wch: 6 }, { wch: 10 }, { wch: 16 }, { wch: 16 }];
+  XLSX.utils.book_append_sheet(wb, wsData, 'Wait Time Data');
+
+  XLSX.writeFile(wb, 'June 2026 Average Wait Time by Hour.xlsx');
+});
+
+document.getElementById('downloadCsv').addEventListener('click', () => {
+  if (!pivot) return;
+  let csv = ['Day', ...HOURS.map(h => HOUR_LABELS[h])].join(',') + '\n';
+  DAYS.forEach(d => {
+    const row = [d];
+    HOURS.forEach(h => {
+      const v = pivot.table[d][h];
+      row.push(v === null ? '' : v.toFixed(2));
+    });
+    csv += row.join(',') + '\n';
+  });
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'average_wait_time_by_hour.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+</script>
+</body>
+</html>
