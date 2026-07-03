@@ -319,7 +319,7 @@
       <table class="pivot" id="pivotTable"></table>
     </div>
 
-    <div class="legend"><span class="sw"></span> 4.00+ min average (slow hour, worth a look)</div>
+    <div class="legend"><span class="sw"></span> 3.00+ min average (slow hour, worth a look)</div>
 
     <div class="actions">
       <button class="btn" id="downloadBtn">Download June 2026 Average Wait Time by Hour.xlsx</button>
@@ -484,7 +484,7 @@ function renderResults(){
       if (v === null) {
         tbody += '<td class="empty">&mdash;</td>';
       } else {
-        const cls = v >= 4 ? 'hi' : '';
+        const cls = v >= 3 ? 'hi' : '';
         tbody += `<td class="${cls}">${v.toFixed(2)}</td>`;
       }
     });
